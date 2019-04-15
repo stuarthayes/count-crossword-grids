@@ -850,28 +850,6 @@ void find_valid_7x4_subgrids(void) {
 	}
 }
 
-/*
-int subgrid_7x8_square(int lsg, int rsg, int r, int c) {
-	if (c >= SUBGRID_COLS_7x4)
-		return (rsg & (1 << (r * SUBGRID_COLS_7x4 + c - SUBGRID_COLS_7x4))) > 0;
-	return (lsg & (1 << (r * SUBGRID_COLS_7x4 + c))) > 0;
-}
-void set_subgrid_7x8_square(int lsg, int rsg, int r, int c) {
-	if (c >= SUBGRID_COLS_7x4) {
-		rsg |= (1 << (r * SUBGRID_COLS_7x4 + c - SUBGRID_COLS_7x4));
-		return;
-	}
-	lsg |= (1 << (r * SUBGRID_COLS_7x4 + c));
-}
-
-int whitesquares_in_7x8_sg(int lsg, int rsg) {
-	return (SUBGRID_ROWS * SUBGRID_COLS_7x8) - __builtin_popcount(lsg) - __builtin_popcount(rsg);
-}
-int blacksquares_in_7x8_sg(int lsg, int rsg) {
-	return __builtin_popcount(lsg) + __builtin_popcount(rsg);
-}
-*/
-
 
 unsigned long long seen_7x8_sg, working_7x8_sg; // subgrids used for finding regions
 
@@ -1276,7 +1254,7 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
  */
 
 void find_valid_7x8_subgrids(void) {
-	int lsg, rsg;
+	int lsgidx, rsgidx;
 	unsigned long long count;
 	int rightkey_index, bottomkey_index;
 	int num_regions;
@@ -1303,26 +1281,26 @@ void find_valid_7x8_subgrids(void) {
 	}
 
 	count = 0;
-	for (lsg = 0; lsg < valid_left_7x4_subgrid_count; lsg++)
-		for (rsg = 0; rsg < valid_right_7x4_subgrid_count; rsg++) {
-			if (check_subgrid_ok_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg])) {
+	for (lsgidx = 0; lsgidx < valid_left_7x4_subgrid_count; lsgidx++)
+		for (rsgidx = 0; rsgidx < valid_right_7x4_subgrid_count; rsgidx++) {
+			if (check_subgrid_ok_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx])) {
 				/*
 				 * here we have a valid 7x8 subgrid as far as all words are 3+ letters... now
 				 * get the region key (which also will reject 7x8 subgrid that has isolated white regions)
 				 */
-				num_regions = region_key_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg], &regkey);
+				num_regions = region_key_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx], &regkey);
 				/*
 				 * num_regions will be -1 if the subgrid has an region of isolated white squares--exclude those
 				 */
 				if (num_regions >= 0) {
 					//debug -- count how many 7x8 subgrids have a given number of regions...
 					num_subgrids_with_given_regcount[num_regions]++;
-					if (num_regions==0) printf("num_regions 0 for lsgidx rsgidx %x %x\n", lsg, rsg);
+					if (num_regions==0) printf("num_regions 0 for lsgidx rsgidx %x %x\n", lsgidx, rsgidx);
 
 					// here we've found a valid 7x8 subgrid, with no isolated white squares
 					count++;
-					rightkey_index = valid_key_index[rightkey_7x4(valid_right_7x4_subgrid[rsg])];
-					bottomkey_index = valid_key_index[bottomkey_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg])];
+					rightkey_index = valid_key_index[rightkey_7x4(valid_right_7x4_subgrid[rsgidx])];
+					bottomkey_index = valid_key_index[bottomkey_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx])];
 					(*(valid_7x8_subgrid_count_rk_bk + (valid_key_count * rightkey_index + bottomkey_index)))++;
 
 					/*
@@ -1376,14 +1354,14 @@ void find_valid_7x8_subgrids(void) {
 	printf("storing, sorting, and indexing all 7x8 subgrids with their keys (for debugging)\n");
 	valid_7x8_subgrid = calloc(count, count * sizeof(struct valid_7x8_subgrid_type));
 	i = 0;
-	for (lsg = 0; lsg < valid_left_7x4_subgrid_count; lsg++)
-		for (rsg = 0; rsg < valid_right_7x4_subgrid_count; rsg++) {
-			if (check_subgrid_ok_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg])) {
+	for (lsgidx = 0; lsgidx < valid_left_7x4_subgrid_count; lsgidx++)
+		for (rsgidx = 0; rsgidx < valid_right_7x4_subgrid_count; rsgidx++) {
+			if (check_subgrid_ok_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx])) {
 				/*
 				 * here we have a valid 7x8 subgrid as far as all words are 3+ letters... now
 				 * get the region key (which also will reject 7x8 subgrid that has isolated white regions)
 				 */
-				num_regions = region_key_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg], &regkey);
+				num_regions = region_key_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx], &regkey);
 				/*
 				 * num_regions will be 0 if the subgrid has an region of isolated white squares--exclude those
 				 */
@@ -1391,20 +1369,20 @@ void find_valid_7x8_subgrids(void) {
 					//debug -- count how many 7x8 subgrids have a given number of regions...
 
 					// here we've found a valid 7x8 subgrid, with no isolated white squares
-					rightkey_index = valid_key_index[rightkey_7x4(valid_right_7x4_subgrid[rsg])];
-					bottomkey_index = valid_key_index[bottomkey_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg])];
-					valid_7x8_subgrid[i].lsg = valid_left_7x4_subgrid[lsg];
-					valid_7x8_subgrid[i].rsg = valid_right_7x4_subgrid[rsg];
+					rightkey_index = valid_key_index[rightkey_7x4(valid_right_7x4_subgrid[rsgidx])];
+					bottomkey_index = valid_key_index[bottomkey_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx])];
+					valid_7x8_subgrid[i].lsgidx = valid_left_7x4_subgrid[lsgidx];
+					valid_7x8_subgrid[i].rsgidx = valid_right_7x4_subgrid[rsgidx];
 					valid_7x8_subgrid[i].regkey = regkey;
 					valid_7x8_subgrid[i].rki = rightkey_index;
 					valid_7x8_subgrid[i].bki = bottomkey_index;
 #if 1
 					printf("setting valid_7x8_subgrid[%d] lsg/rsg %x/%x lsgi/rsgi %x/%x rk/bk %x/%x rki/bki %x/%x regkey %llx\n",
 							i,
-							valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg],
-							lsg, rsg,
-							rightkey_7x4(valid_right_7x4_subgrid[rsg]),
-							bottomkey_7x8(valid_left_7x4_subgrid[lsg], valid_right_7x4_subgrid[rsg]),
+							valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx],
+							lsgidx, rsgidx,
+							rightkey_7x4(valid_right_7x4_subgrid[rsgidx]),
+							bottomkey_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx]),
 							rightkey_index, bottomkey_index,
 							*(unsigned long long *)(regkey.bitmask_for_region));
 #endif
