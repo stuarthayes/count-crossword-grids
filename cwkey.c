@@ -8,69 +8,66 @@
 #include <x86intrin.h>
 
 /*
- * width (& height) of puzzle in squares
+ * width (& height) of puzzle in squares -- must be an odd number
+ * (currently limited to a max of 15x15 because of data sizes)
+ *
+ * TODO:  make this an input to the program, instead of hard-coded
  */
 
-#define PUZZLE_SIZE 15
+#define PUZZLE_SIZE 13
+#define PRINT_ALL_VALID_GRIDS 0
 
 /*
  * This program works with "subgrids" that are 1/8 and 1/4 the size of the puzzle
  * so for a 15x15 grid, it will generate 7x4 and 7x8 "subgrids".
  *
- * The program just calls them 7x4 and 7x8, even though they won't be those sizes
- * if a different PUZZLE_SIZE is used.
+ * The program works with 7x4 and 7x8 subgrids, even though with smaller puzzle sizes
+ * the subgrids will have rows/columns of black at the edges
  *
- * Currently the puzzle size must be ODD... could be made to work with even puzzle sizes without too much work.
+ * Currently the puzzle size must be ODD because the same set of subgrids is used for
+ * each quadrant of the puzzle
  *
- * 19x19 puzzle:  SUBGRID_ROWS=9  SUBGRID_COLS_7x4=5 SUBGRID_COLS_7x8=10 (might need some data size tweaks and stuff... not tested yet)
- * 15x15 puzzle:  SUBGRID_ROWS=7  SUBGRID_COLS_7x4=4 SUBGRID_COLS_7x8=8
- * 11x11 puzzle:  SUBGRID_ROWS=5  SUBGRID_COLS_7x4=3 SUBGRID_COLS_7x8=6
- *
- * Right now it only works with puzzle sizes where PUZZLE_SIZE+1 is a multiple of 4
- * because of the way 1/8-size subgrids are used to generate the 1/4 size subgrids
- * could change that but no reason to bother right now... going for speed more
- * than flexibility.
- *
- * It will also only work if SUBGRID_ROWS and SUBGRID_COLS_7x4 are at least 3,
- * because the code right now looks at the last 3 columns or rows to generate 
- * keys for subgrids
- *
- * right now ALSO only works with PUZZLE_SIZE of 11 or 15, because some things
- * like line1x10ok bitmap has to be big enough to check the width of a "7x8" subgrid
- * (this could easily be fixed by just making line1x10ok into line1x12ok or
- * something larger, with no other changes)... region keys might also need a
- * different size
+ * The stuff below shouldn't need to change for different puzzle sizes
  */
 
-#define SUBGRID_ROWS ((PUZZLE_SIZE - 1) / 2)
-#define SUBGRID_COLS_7x4 ((PUZZLE_SIZE + 1) / 4)
-#define SUBGRID_COLS_7x8 ((PUZZLE_SIZE + 1) / 2)
+#define SUBGRID_ROWS 7
+#define SUBGRID_COLS_7x4 4
+#define SUBGRID_COLS_7x8 8
+
+#define SUBGRID_ROWS_ACTUAL ((PUZZLE_SIZE - 1) / 2)
+#define SUBGRID_COLS_7x4_ACTUAL ((PUZZLE_SIZE + 1) / 4)
+#define SUBGRID_COLS_7x8_ACTUAL ((PUZZLE_SIZE + 1) / 2)
 
 #define MAX_SUBGRID_7x4 ((1UL << (SUBGRID_ROWS * SUBGRID_COLS_7x4 )) - 1)
 #define ALL_BLACK_SUBGRID_7x4 MAX_SUBGRID_7x4
 #define ALL_BLACK_SUBGRID_ROW_7x4 ((1UL << (SUBGRID_COLS_7x4)) -1)
 #define ALL_BLACK_SUBGRID_ROW_7x8 ((1UL << (SUBGRID_COLS_7x8)) -1)
+#define ALL_BLACK_SUBGRID_COL ((1UL << (SUBGRID_ROWS)) -1)
 
 
 /*
  * To avoid having to store and compare EVERY combination of grids, this
  * program works with subgrids that are roughly 1/4 the size of the grid
- * (they're 7x8 for a 15x15, and called "7x8" in this program regardless
- * of their actual size).
+ * (they're 7x8 for a 15x15, and it just makes sure that the outer rows 
+ * and columns are black for smaller sizes).
  *
- * To avoid having to store and compare every 7x8 subgrid, it just looks
- * at the edge squares... it just generates keys that represent all we
- * care about--which is, how many white squares would be needed in that
- * row or column in the adjacent subgrid for the word lengths to all be
- * 3 or more.
+ * To avoid having to store and compare every possible 7x8 subgrid, the
+ * program just looks at and stores info based on the edge squares of
+ * the possible subgrids.
  *
- * Additionally, it will look at regions of isolated white squares in the
+ * It generates keys that represent all the necessary information--which is:
+ *
+ * (1) How many white squares would be needed in a row or column in the
+ * adjacent subgrid for the word lengths to all be 3 letters or more.
+ * This information is referred to as the "key" of the subgrid.
+ *
+ * (2) It will look at regions of non-connecting white squares in the
  * subgrids, and store a "region key" that shows where the different
  * white regions in the subgrid connect to the edge squares that connect
  * to other subgrids, which we can use to make sure that all the white
  * squares in the final grid will be connected to each other.
  *
- * So this program uses "keys" to see if the big "7x8" subgrids
+ * So this program uses the "key" of the subgrids to see if the big 7x8 subgrids
  * will fit together... the key is a number that indicates how many white
  * squares are on that edge of the subgrid, 2 bits per row or column...
  * the 2 bits per row (or column for a bottom key) indicate that row's edge
@@ -203,18 +200,8 @@ struct sg_regkeys {
 	unsigned long long num_sgs_with_regkey[MAX_REGKEYS_PER_RK_BK];  // unsigned long long may be overkill here
 };
 
-#if 0
-//debug
-int list1l[100];
-int list1r[100];
-int list1count;
-int list2l[100];
-int list2r[100];
-int list2count;
-#endif
 
-
-#if PUZZLE_SIZE==11
+#if PRINT_ALL_VALID_GRIDS==1
 struct valid_7x8_subgrid_type {
 	int lsg;
 	int rsg;
@@ -239,6 +226,7 @@ int valid7x8compare(const void *elem1, const void *elem2) {
 #define MAX_GOOD_GRIDS 25000000
 unsigned long long good_grids[MAX_GOOD_GRIDS];
 int good_grids_count;
+
 #endif
 
 
@@ -252,7 +240,6 @@ int num_rk_bk_with_given_num_regkeys[MAX_REGKEYS_PER_RK_BK];
  * pre-calculated for speed
  */
 
-//DECLARE_BITMAP(line1x10_ok, 1024);
 char line1x10_ok[128]; // 1024-bit bitmap
 
 static __always_inline void set_bit(int n, char *addr) {
@@ -300,7 +287,7 @@ int rightkey[8] = {3, 2, 1, 1, 0, 0, 0, 0};
 /*
  * subgrid_row / subgrid_col
  *
- * return just the row requested from a subgrid represented by an int
+ * return just the row or column requested from a subgrid
  */
 int subgrid_row_7x4(int subgrid, int r) {
 	return ( subgrid >> (r * SUBGRID_COLS_7x4) ) & ALL_BLACK_SUBGRID_ROW_7x4;
@@ -372,7 +359,8 @@ int bottomkey_7x8(int lsg, int rsg) {
 	       + (rightkey[(subgrid_col_7x4(rsg, 1) & 0x70) >> 4] << 10)
 	       + (rightkey[(subgrid_col_7x4(rsg, 2) & 0x70) >> 4] << 12);
 #endif
-#if (SUBGRID_COLS_7x8 == 6) && (SUBGRID_ROWS == 5)
+#if 0
+//#if (SUBGRID_COLS_7x8 == 6) && (SUBGRID_ROWS == 5)
 	return   (rightkey[(subgrid_col_7x4(lsg, 0) & 0x1c) >> 2] << 0)
 	       + (rightkey[(subgrid_col_7x4(lsg, 1) & 0x1c) >> 2] << 2)
 	       + (rightkey[(subgrid_col_7x4(lsg, 2) & 0x1c) >> 2] << 4)
@@ -504,7 +492,7 @@ void print_wholegrid(int lsg_a, int rsg_a, int lsg_b, int rsg_b) {
 }
 
 
-#if PUZZLE_SIZE==11
+#if PRINT_ALL_VALID_GRIDS==1
 unsigned long long print_wholegrid_asanumber (int lsg_a, int rsg_a, int lsg_b, int rsg_b, int centersquare) {
 	int r;
 	unsigned long long grid;
@@ -724,10 +712,26 @@ int check_subgrid_ok_7x4(int subgrid) {
 		if (!check_line_ok_quick( (subgrid_col_7x4(subgrid, c) << 1) | 0x01))
 			return 0;
 
-	/* make sure subgrid doesn't have an 'island' of white squares */
-	//if (subgrid_has_white_island(subgrid))
-	//	return 0;
-	
+	/*
+	 * make sure top X rows and left X columns are black if the puzzle size is smaller
+	 * than 15x15... we'll still work with 7x4 & 7x8 subgrids, just with black rows
+	 * and columns at the top and left
+	 */
+
+	for (r = 0; r < (SUBGRID_ROWS - SUBGRID_ROWS_ACTUAL); r++)
+		if (subgrid_row_7x4(subgrid, r) != ALL_BLACK_SUBGRID_ROW_7x4)
+			return 0;
+	for (c = 0; c < (SUBGRID_COLS_7x8 - SUBGRID_COLS_7x8_ACTUAL); c++)
+		if (c < SUBGRID_COLS_7x4) {
+			if (subgrid_col_7x4(subgrid, c) != ALL_BLACK_SUBGRID_COL) {
+				ok_on_leftside = 0;
+				break;
+			}
+		} else {
+			if (subgrid_col_7x4(subgrid, c - SUBGRID_COLS_7x4))
+				return 0;
+		}
+
 	return 1 + ok_on_leftside;
 }
 
@@ -908,7 +912,8 @@ const int edge_bitpos_in_bitmask[14] =  {0,  1,  2,  3,  4,  5,  6,  14, 13, 12,
 const regkey_bitmask regkey_bitmask_next_to_centersquare = 0x40; // regkey bitmask that has a "1" adjacent to the center square
 #endif
 
-#if (SUBGRID_ROWS==5)
+#if 0
+//#if (SUBGRID_ROWS==5)
 const int edge_bitpos_in_7x8sg[14] =    {5, 11, 17, 23, 29,   28, 27, 26, 25, 24};
 const int edge_bitpos_in_bitmask[14] =  {0,  1,  2,  3,  4,   12, 11, 10,  9,  8};
 // regkey_bitmask bit that's adjacent to the center square:
@@ -1011,12 +1016,14 @@ int find_region(int r, int c) {
  * return number of regions found, and the region key in *regkey
  */
 
-#if PUZZLE_SIZE==15
+//#if PUZZLE_SIZE==15
+#if SUBGRID_ROWS==7
 int sg_7x8_edge_row[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {0, 1, 2, 3, 4, 5, 6,  6, 6, 6, 6, 6, 6, 6};
 int sg_7x8_edge_col[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {7, 7, 7, 7, 7, 7, 7,  6, 5, 4, 3, 2, 1, 0};
 #endif
 
-#if PUZZLE_SIZE==11
+#if 0
+//#if PUZZLE_SIZE==11
 int sg_7x8_edge_row[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {0, 1, 2, 3, 4,  4, 4, 4, 4, 4};
 int sg_7x8_edge_col[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {5, 5, 5, 5, 5,  4, 3, 2, 1, 0};
 #endif
@@ -1078,14 +1085,12 @@ int region_key_7x8(int lsg, int rsg, struct single_regkey *regkey) { // need to 
 				/*
 				 *  found all the white regions, quit looking
 				 */
-				if (regkey->num_regions == 0) printf("xxx 0 regions: lsg %x rsg %x\n", lsg, rsg);
 				return regkey->num_regions;
 			}
 		}
 	}
 	if (blacksquares_in_seen_7x8_sg() == whitesquares_in_working_7x8_sg()) {
 		// this should only be the all-black subgrid
-		if (regkey->num_regions == 0) printf("xxx 0 regions: lsg %x rsg %x\n", lsg, rsg);
 		return regkey->num_regions;
 	}
 	/*
@@ -1342,7 +1347,7 @@ void find_valid_7x8_subgrids(void) {
 		}
 
 
-#if PUZZLE_SIZE==11
+#if PRINT_ALL_VALID_GRIDS==1 
 
 	/*
 	 * for debugging!
@@ -1371,8 +1376,8 @@ void find_valid_7x8_subgrids(void) {
 					// here we've found a valid 7x8 subgrid, with no isolated white squares
 					rightkey_index = valid_key_index[rightkey_7x4(valid_right_7x4_subgrid[rsgidx])];
 					bottomkey_index = valid_key_index[bottomkey_7x8(valid_left_7x4_subgrid[lsgidx], valid_right_7x4_subgrid[rsgidx])];
-					valid_7x8_subgrid[i].lsgidx = valid_left_7x4_subgrid[lsgidx];
-					valid_7x8_subgrid[i].rsgidx = valid_right_7x4_subgrid[rsgidx];
+					valid_7x8_subgrid[i].lsg = valid_left_7x4_subgrid[lsgidx];
+					valid_7x8_subgrid[i].rsg = valid_right_7x4_subgrid[rsgidx];
 					valid_7x8_subgrid[i].regkey = regkey;
 					valid_7x8_subgrid[i].rki = rightkey_index;
 					valid_7x8_subgrid[i].bki = bottomkey_index;
@@ -1673,7 +1678,6 @@ int main(int argc, const char *argv[]) {
 					/*
 					 * here we've found an A-rightkey that fits with a B-bottomkey... now cycle through all of the possible B-rightkeys
 					 */
-					//if ((A_rightkeyidx == 0x81) && (B_bottomkeyidx == 0x2d)) printf("A_rki/B_bki 0x%x/0x%x fit...\n", A_rightkeyidx, B_bottomkeyidx);
 					for (B_rightkeyidx = 0; B_rightkeyidx < valid_key_count; B_rightkeyidx++) {
 						/*
 						 * make sure there are subgrids with this RK/BK combo for the B subgrid...
@@ -1682,7 +1686,6 @@ int main(int argc, const char *argv[]) {
 							/*
 							 * make sure there is a possible value for the center square with this RK/BK combo for the B subgrid...
 							 */
-							//if ((A_rightkeyidx == 0x81) && (B_bottomkeyidx == 0x2d) && (B_rightkeyidx == 0x54)) printf("A_rki/B_bki/B_rki 0x%x/0x%x/0x%x there are valid B subgrids...\n", A_rightkeyidx, B_bottomkeyidx, B_rightkeyidx);
 							csqs = valid_center_square_values(valid_key[A_rightkeyidx], valid_key[B_rightkeyidx]);
 							if (csqs) {
 								for (A_bottomkeyidx = 0; A_bottomkeyidx < valid_key_count; A_bottomkeyidx++) {
@@ -1694,12 +1697,6 @@ int main(int argc, const char *argv[]) {
 										 * check that the A and B subgrids fit together at the A-bottom / B-right key interface
 										 */
 										if (keysfit(valid_key[A_bottomkeyidx], valid_key[B_rightkeyidx])) {
-#if 0
-											if (   (A_rightkeyidx == 0) && (B_bottomkeyidx == 0)
-											    && (B_rightkeyidx == 0) && (A_bottomkeyidx == 0))
-												printf("A_rki/A_bki/B_rki/B_bki 0x%x/0x%x/0x%x/0x%x fit and there are valid subgrids\n",
-													A_rightkeyidx, A_bottomkeyidx, B_rightkeyidx, B_bottomkeyidx);
-#endif
 											/*
 											 * Here we have values for A's and B's right and bottom keys,
 											 * we know they fit together, and that they allow at least one
@@ -1709,12 +1706,7 @@ int main(int argc, const char *argv[]) {
 											 */
 											A_regkeys = regkeys_by_rk_bk + (valid_key_count * A_rightkeyidx + A_bottomkeyidx);
 											B_regkeys = regkeys_by_rk_bk + (valid_key_count * B_rightkeyidx + B_bottomkeyidx);
-#if 1
-											if (   (A_rightkeyidx == 0) && (B_bottomkeyidx == 0)
-											    && (B_rightkeyidx == 0) && (A_bottomkeyidx == 0))
-												printf("A_rki/B_bki/B_rki/A_bki fit, A_regkeys->num_regkeys %d, B_regkeys->num_regkeys %d\n",
-														A_regkeys->num_regkeys, B_regkeys->num_regkeys);
-#endif
+
 											for (A_regkeyidx = 0; A_regkeyidx < A_regkeys->num_regkeys; A_regkeyidx++)
 												for (B_regkeyidx = 0; B_regkeyidx < B_regkeys->num_regkeys; B_regkeyidx++) {
 													regkeysfit = regkeys_fit(&A_regkeys->regkey[A_regkeyidx], &B_regkeys->regkey[B_regkeyidx]);
@@ -1722,7 +1714,7 @@ int main(int argc, const char *argv[]) {
 													count +=   A_regkeys->num_sgs_with_regkey[A_regkeyidx]
 														 * B_regkeys->num_sgs_with_regkey[B_regkeyidx]
 														 * __builtin_popcount(csqs & regkeysfit);
-													#if PUZZLE_SIZE==11
+													#if PRINT_ALL_VALID_GRIDS==1
 													{
 														int count_increased, printed;
 #if 1
@@ -1789,7 +1781,7 @@ int main(int argc, const char *argv[]) {
 		printf("found %lld total valid grids\n", count);
 	}
 
-#if PUZZLE_SIZE==11
+#if PRINT_ALL_VALID_GRIDS==1
 	print_good_grids();
 #endif
 	return 0;
