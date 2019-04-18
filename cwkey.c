@@ -14,8 +14,9 @@
  * TODO:  make this an input to the program, instead of hard-coded
  */
 
-#define PUZZLE_SIZE 13
-#define PRINT_ALL_VALID_GRIDS 0
+#define PUZZLE_SIZE 11
+#define PRINT_ALL_VALID_GRIDS 1
+#define PRINT_ALL_VALID_GRIDS_GRAPHICAL 0
 
 /*
  * This program works with "subgrids" that are 1/8 and 1/4 the size of the puzzle
@@ -42,6 +43,7 @@
 #define ALL_BLACK_SUBGRID_7x4 MAX_SUBGRID_7x4
 #define ALL_BLACK_SUBGRID_ROW_7x4 ((1UL << (SUBGRID_COLS_7x4)) -1)
 #define ALL_BLACK_SUBGRID_ROW_7x8 ((1UL << (SUBGRID_COLS_7x8)) -1)
+#define ALL_BLACK_GRID_ROW ((1UL << (SUBGRID_COLS_7x8 + SUBGRID_ROWS)) - 1)
 #define ALL_BLACK_SUBGRID_COL ((1UL << (SUBGRID_ROWS)) -1)
 
 
@@ -464,7 +466,7 @@ void print_subgrid_7x8_whole(unsigned long long subgrid) {
 	}
 }
 
-void print_wholegrid(int lsg_a, int rsg_a, int lsg_b, int rsg_b) {
+void print_wholegrid(int lsg_a, int rsg_a, int lsg_b, int rsg_b, int csq) {
 	int r;
 	for (r = 0; r < SUBGRID_ROWS; r++) {
 		print_row(subgrid_row_7x4(lsg_a ,r), SUBGRID_COLS_7x4);
@@ -476,7 +478,7 @@ void print_wholegrid(int lsg_a, int rsg_a, int lsg_b, int rsg_b) {
 		printf("\n");
 	}
 	print_row(subgrid_col_7x4(rsg_b, SUBGRID_COLS_7x4 - 1), SUBGRID_ROWS);
-	printf("x");
+	printf(csq ? "#" : "_");
 	print_row(reverse_bits(subgrid_col_7x4(rsg_b, SUBGRID_COLS_7x4 - 1), SUBGRID_ROWS), SUBGRID_ROWS);
 	printf("\n");
 	for (r = SUBGRID_ROWS - 1; r >= 0; r--) {
@@ -493,10 +495,14 @@ void print_wholegrid(int lsg_a, int rsg_a, int lsg_b, int rsg_b) {
 
 
 #if PRINT_ALL_VALID_GRIDS==1
-unsigned long long print_wholegrid_asanumber (int lsg_a, int rsg_a, int lsg_b, int rsg_b, int centersquare) {
-	int r;
+/*
+ * unsigned long used for the number, 64 bits is too small for anything over 11x11
+ */
+#if PUZZLE_SIZE < 12
+unsigned long long store_wholegrid_asanumber_in_good_grids(int lsg_a, int rsg_a, int lsg_b, int rsg_b, int centersquare) {
+	int r, rr;
 	unsigned long long grid;
-	unsigned long long row[SUBGRID_ROWS + 1];
+	unsigned long long row;
 
 	if (good_grids_count >= MAX_GOOD_GRIDS) {
 		printf("Too many valid grids found--good_grids array needs to be enlarged!\n");
@@ -504,34 +510,42 @@ unsigned long long print_wholegrid_asanumber (int lsg_a, int rsg_a, int lsg_b, i
 	}
 
 	grid = 0;
-	for (r = 0; r < SUBGRID_ROWS; r++) {
-		row[r]  = subgrid_row_7x4(lsg_a, r);
-		row[r] += subgrid_row_7x4(rsg_a, r) << SUBGRID_COLS_7x4;
+	/*
+	 * start at first actual row, don't include all-black rows if full subgrid size isn't being used
+	 */
+	rr = 0;
+	for (r = (SUBGRID_ROWS - SUBGRID_ROWS_ACTUAL); r < SUBGRID_ROWS; r++) {
+		row  = subgrid_row_7x4(lsg_a, r);
+		row += subgrid_row_7x4(rsg_a, r) << SUBGRID_COLS_7x4;
 		if (r < SUBGRID_COLS_7x4)
-			row[r] += reverse_bits(subgrid_col_7x4(lsg_b, r), SUBGRID_ROWS) << (SUBGRID_COLS_7x4*2);
+			row += reverse_bits(subgrid_col_7x4(lsg_b, r), SUBGRID_ROWS) << (SUBGRID_COLS_7x4*2);
 		else
-			row[r] += reverse_bits(subgrid_col_7x4(rsg_b, r - SUBGRID_COLS_7x4), SUBGRID_ROWS) << (SUBGRID_COLS_7x4*2);
-		grid += row[r] << (r * 11);
+			row += reverse_bits(subgrid_col_7x4(rsg_b, r - SUBGRID_COLS_7x4), SUBGRID_ROWS) << (SUBGRID_COLS_7x4*2);
+		/*
+		 * chop off edges if full subgrid size isn't being used
+		 */
+		row &= (ALL_BLACK_GRID_ROW >> (SUBGRID_ROWS - SUBGRID_ROWS_ACTUAL));
+		row >>= (SUBGRID_ROWS - SUBGRID_ROWS_ACTUAL);
+
+		grid += row << (rr * (SUBGRID_COLS_7x8_ACTUAL + SUBGRID_ROWS_ACTUAL));
+		rr++;
 	}
 
-	row[r] = subgrid_col_7x4(rsg_b, SUBGRID_COLS_7x4 - 1);
-	row[r] += centersquare << (SUBGRID_COLS_7x8 - 1);
-	grid += row[r] << (r * 11);
+	row = subgrid_col_7x4(rsg_b, SUBGRID_COLS_7x4 - 1);
+	row += centersquare << (SUBGRID_COLS_7x8 - 1);
+	/*
+	 * chop off edges if full subgrid size isn't being used
+	 */
+	row &= (ALL_BLACK_GRID_ROW >> (SUBGRID_ROWS - SUBGRID_ROWS_ACTUAL));
+	row >>= (SUBGRID_ROWS - SUBGRID_ROWS_ACTUAL);
 
-	if (grid == 1152921985941125191) {
-	//if (grid == 2305843008743702415) {
-	//if (grid == 481334278215) {
-	//if (grid == 281543725561863ll) {
-	//if (grid == 1126174851891216ll) {
-		printf("grid %lld is from A_lsg/A_rsg/B_lsg/B_rsg/csq %x/%x/%x/%x/%x\n", grid, lsg_a, rsg_a, lsg_b, rsg_b, centersquare);
-		for (r = 0; r <= SUBGRID_ROWS; r++)
-			printf("row[%d]: %llx\n", r, row[r]);
-	}
+	grid += row << (rr * (SUBGRID_COLS_7x8_ACTUAL + SUBGRID_ROWS_ACTUAL));
 
 	good_grids[good_grids_count++] = grid;
 	//printf("%lld\n", grid);
 	return grid;
 }
+#endif
 
 int ullcomp (const void *elem1, const void *elem2) {
 	unsigned long long f = *((unsigned long long *)elem1);
@@ -547,7 +561,7 @@ void print_good_grids() {
 	printf("there were %d valid grids found\n", good_grids_count);
 	qsort(good_grids, good_grids_count, sizeof(*good_grids), ullcomp);
 	for (i=0; i<good_grids_count; i++)
-		printf("%lld\n", good_grids[i]);
+		printf("%llu\n", good_grids[i]);
 }
 
 /*
@@ -571,24 +585,11 @@ int list_all_grids_with_specified_keys(int A_rki, int A_bki, int B_rki, int B_bk
 	a_sg_start_idx = valid_7x8_subgrid_index_by_rk_bk[valid_key_count * A_rki + A_bki];
 	b_sg_start_idx = valid_7x8_subgrid_index_by_rk_bk[valid_key_count * B_rki + B_bki];
 	
-#if 0
-	if ((A_rki == 0xb8) && (A_bki == 0xb8) && (B_rki == 0xb8) && (B_bki == 0xb8)) {
-		printf("trying to print all grids Arki/Abki/Brki/Bbki  csqs  %d %d %d %d   %d\n", A_rki, A_bki, B_rki, B_bki, csqs);
-		flag = 1;
-		//printf("valid_7x8_subgrid[%d].rki/bki = %d %d\n", a_sg_start_idx, valid_7x8_subgrid[a_sg_start_idx].rki, valid_7x8_subgrid[a_sg_start_idx].bki);
-		//printf("valid_7x8_subgrid[%d].rki/bki = %d %d\n", b_sg_start_idx, valid_7x8_subgrid[b_sg_start_idx].rki, valid_7x8_subgrid[b_sg_start_idx].bki);
-	}
-#endif
 	/*
 	 * loop through all of the A subgrids with the specified right/bottom key indexes
 	 */
 	a_sg_idx = a_sg_start_idx;
 	while ((valid_7x8_subgrid[a_sg_idx].rki == A_rki) && (valid_7x8_subgrid[a_sg_idx].bki == A_bki)) { 
-#if 0
-		if (flag) printf("A keys match, now trying A regkeys (want %llx, valid subgrid has %llx)\n",
-				*(unsigned long long*)(A_regkey->bitmask_for_region),
-		    		*(unsigned long long*)(valid_7x8_subgrid[a_sg_idx].regkey.bitmask_for_region));
-#endif
 		/*
 		 * make sure the region key of this subgrid matches what was specified
 		 */
@@ -606,7 +607,13 @@ int list_all_grids_with_specified_keys(int A_rki, int A_bki, int B_rki, int B_bk
 						if (csqs & c) {
 							unsigned long long wholegridnumber;
 							matching_grids_found++;
-							wholegridnumber = print_wholegrid_asanumber(
+#if PRINT_ALL_VALID_GRIDS_GRAPHICAL==1
+							print_wholegrid(valid_7x8_subgrid[a_sg_idx].lsg,
+									valid_7x8_subgrid[a_sg_idx].rsg,
+									valid_7x8_subgrid[b_sg_idx].lsg,
+									valid_7x8_subgrid[b_sg_idx].rsg, ((c == 1) ? 0 : 1) );
+#endif
+							wholegridnumber = store_wholegrid_asanumber_in_good_grids(
 												valid_7x8_subgrid[a_sg_idx].lsg,
 												valid_7x8_subgrid[a_sg_idx].rsg,
 												valid_7x8_subgrid[b_sg_idx].lsg,
