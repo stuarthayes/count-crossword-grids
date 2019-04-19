@@ -1149,14 +1149,6 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
 			       csq_connections,
 			       x;
 	int centersquareiswhite;
-	int flag;
-
-	// debug flag
-	flag = 0;
-#if 1
-	if ((*(unsigned long long *)(regkeyA->bitmask_for_region)==0x0) && (*(unsigned long long *)(regkeyB->bitmask_for_region)==0x0))
-		flag = 1;
-#endif
 
 	/*
 	 * OR together all the region bitmasks to find all of the edge squares touched
@@ -1174,9 +1166,6 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
 		all_whitesquare_edges |= TR(regkeyB->bitmask_for_region[r]);
 	}
 
-	if (flag)
-		printf("regkeysfit:  all_whitesquare_edges=%x  edges_next_to_centersquare=%x\n", all_whitesquare_edges, edges_next_to_centersquare);
-        	
 	/*
 	 * start with the first region of the top left subgrid (arbitrary), and use the
 	 * region bitmasks to connect it to everything to which it can connect,
@@ -1185,8 +1174,6 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
 	edges_connected_to_topleft_region0 = regkeyA->bitmask_for_region[0];
 
 	for (centersquareiswhite = 0; centersquareiswhite <= 1; centersquareiswhite++) {
-		if (flag)
-			printf("regkeys_fit: centersquareiswhite=%d\n",centersquareiswhite);
 		csq_connections = centersquareiswhite ? edges_next_to_centersquare : 0;
 		/*
 		 * loop as long as we keep connecting more regions 
@@ -1201,12 +1188,10 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
 				if (x & csq_connections) x |= csq_connections;
 				if (edges_connected_to_topleft_region0 & x)
 					edges_connected_to_topleft_region0 |= x;
-				if (flag) printf("  B1: %x\n", edges_connected_to_topleft_region0);
 				x = BL(regkeyB->bitmask_for_region[r]);
 				if (x & csq_connections) x |= csq_connections;
 				if (edges_connected_to_topleft_region0 & x)
 					edges_connected_to_topleft_region0 |= x;
-				if (flag) printf("  B2: %x\n", edges_connected_to_topleft_region0);
 			}
 			/*
 			 * connect in A subgrid's regions (TL and BR)
@@ -1216,12 +1201,10 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
 				if (x & csq_connections) x |= csq_connections;
 				if (edges_connected_to_topleft_region0 & x)
 					edges_connected_to_topleft_region0 |= x;
-				if (flag) printf("  A1: %x\n", edges_connected_to_topleft_region0);
 				x = BR(regkeyA->bitmask_for_region[r]);
 				if (x & csq_connections) x |= csq_connections;
 				if (edges_connected_to_topleft_region0 & x)
 					edges_connected_to_topleft_region0 |= x;
-				if (flag) printf("  A2: %x\n", edges_connected_to_topleft_region0);
 			}
 			/*
 			 * check if all regions have connected up yet
@@ -1231,14 +1214,11 @@ int regkeys_fit(struct single_regkey *regkeyA, struct single_regkey *regkeyB) {
 				 * they all connect!  return value based on whether center square has to be white or if it can be white or black
 				 * (3 = center can be black or white, 1 = center must be white for all regions to connect)
 				 */
-				if (flag) printf("regkeysfit: returning %d\n", centersquareiswhite ? 1 : 3);
 				return centersquareiswhite ? 1 : 3;
 			}
 		} while (edges_connected_to_topleft_region0_previousloop != edges_connected_to_topleft_region0);
 	}
 
-	if (flag)
-		printf("regkeysfit: returning 0\n");
 	return 0;
 }
 #endif
@@ -1747,33 +1727,10 @@ int main(int argc, const char *argv[]) {
 																	  &A_regkeys->regkey[A_regkeyidx],
 																	  &B_regkeys->regkey[B_regkeyidx],
 																	  (csqs & regkeysfit));
-															// sanity check--delete
-															if (printed != count_increased) {
-																printf("<===========================>\n");
-																printf("<==> printed %d but should have printed %d!\n", printed, count_increased);
-																printf("<==> A_regkeys->num_sgs_with_regkey[%x]=%lld\n",
-																	A_regkeyidx, A_regkeys->num_sgs_with_regkey[A_regkeyidx]);
-																printf("<==> B_regkeys->num_sgs_with_regkey[%x]=%lld\n",
-																	B_regkeyidx, B_regkeys->num_sgs_with_regkey[B_regkeyidx]);
-																printf("<==> a_rki/a_bki/b_rki/b_bki %x/%x/%x/%x\n",
-																		A_rightkeyidx, A_bottomkeyidx, B_rightkeyidx, B_bottomkeyidx);
-																printf("<==> csqs %d regkeysfit %d\n", csqs, regkeysfit);
-																printf("<==> A_regkey\n");
-																print_regkey(A_regkeys->regkey[A_regkeyidx]);
-																printf("<==> B_regkey\n");
-																print_regkey(B_regkeys->regkey[B_regkeyidx]);
-																printf("<=============================>\n");
-															}
 														}
 													}
 													#endif
 												}
-
-											//  this was the counter before we had regkeys...
-											//
-											//count +=  *(valid_7x8_subgrid_count_rk_bk + valid_key_count * A_rightkeyidx + A_bottomkeyidx)
-											//	* *(valid_7x8_subgrid_count_rk_bk + valid_key_count * B_rightkeyidx + B_bottomkeyidx)
-											//	* ((csqs == 3) ? 2 : 1);
 										}
 									}
 								}
