@@ -14,8 +14,8 @@
  * TODO:  make this an input to the program, instead of hard-coded
  */
 
-#define PUZZLE_SIZE 11
-#define PRINT_ALL_VALID_GRIDS 1
+#define PUZZLE_SIZE 15
+#define PRINT_ALL_VALID_GRIDS 0
 #define PRINT_ALL_VALID_GRIDS_GRAPHICAL 0
 
 /*
@@ -155,23 +155,23 @@ int *valid_7x8_subgrid_count_rk_bk;  // 2D array by right key index and then bot
 				     // bottom key index of 100 (use the valid_key array to look up the actual key from the index)
 
 /*
- * On a 7x8 subgrid (that is actually 7 rows by 8 columns), there can be, at most, 3 unconnected regions of white squares.
- * All white regions in a 7x8 (large (1/4 size of the grid) subgrid--not necessarily actually 7x8) must connect to the
- * edge where they will connect to the other subgrids--if they don't, then you'll have an isolated region of white squares.
+ * On a 7x8 subgrid, there can be, at most, 3 unconnected regions of white squares.
+ * All white regions in a 7x8 must connect to an edge where they will connect 
+ * to the other subgrids--if they don't, then you'll have an isolated region of white squares.
  *
- * Since there are 14 edge squares on a 7x8 (actual 7 rows by 8 columns), and words have to be at least 3 letters long plus
+ * Since there are 14 edge squares on a 7x8 subgrid, and words have to be at least 3 letters long plus
  * one black to divide it from the next word, you can have 14/4 = 3 separate white regions that touch the edge... or
  * (edge squares)/4 in general.
  *
  * With any given edge key (rk/bk combination), that given edge could have (from the last paragraph) up to 3 different
  * regions touching the edge (though they may connect internally, we don't know what's going on inside)... so that given
- * rk/bk edge key combo could have up to 5 different region keys:  XXX XXY XYX YXX XYZ... in fact only seeing up to
- * 4 different region keys for a given rk/bk in an actual 7-row-by-8-column subgrid, presumably because there's just not
+ * rk/bk edge key combo could have up to 5 different region key bitmasks:  XXX XXY XYX YXX XYZ... in fact only seeing up to
+ * 4 different region keys for a given rk/bk in a 7x8 subgrid, presumably because there's just not
  * enough space in a 7x8 subgrid to have 5 regions that all have at least 3-square-long words and all of which connect
  * to the edge.
  *
- * Going to hard code that there can be a maximum of 4-regions in a 7x8 subgrid for now, not worth the trouble of making the program
- * figure out the max and then dynamically allocating that many.  We can hard code a bigger number if we want to support
+ * Going to hard code that there can be a maximum of 4-regions in a 7x8 subgrid for now--it isn't worth the trouble to make the program
+ * figure out the max and then dynamically alloce.  We can hard code a bigger number if we want to support
  * a bigger grid, and the program will throw an error and abort if we don't have enough, so no big deal.
  *
  * Also going to hard code that we won't have more than 5 different possible region keys for any given RK/BK combo (again, we can
@@ -360,14 +360,6 @@ int bottomkey_7x8(int lsg, int rsg) {
 	       + (rightkey[(subgrid_col_7x4(rsg, 0) & 0x70) >> 4] << 8)
 	       + (rightkey[(subgrid_col_7x4(rsg, 1) & 0x70) >> 4] << 10)
 	       + (rightkey[(subgrid_col_7x4(rsg, 2) & 0x70) >> 4] << 12);
-#endif
-#if 0
-//#if (SUBGRID_COLS_7x8 == 6) && (SUBGRID_ROWS == 5)
-	return   (rightkey[(subgrid_col_7x4(lsg, 0) & 0x1c) >> 2] << 0)
-	       + (rightkey[(subgrid_col_7x4(lsg, 1) & 0x1c) >> 2] << 2)
-	       + (rightkey[(subgrid_col_7x4(lsg, 2) & 0x1c) >> 2] << 4)
-	       + (rightkey[(subgrid_col_7x4(rsg, 0) & 0x1c) >> 2] << 6)
-	       + (rightkey[(subgrid_col_7x4(rsg, 1) & 0x1c) >> 2] << 8);
 #endif
 }
 
@@ -880,30 +872,18 @@ unsigned long long singlesquare_bitmask_7x8(int r, int c) {
  * return the squares of the "seen" 7x8 subgrid that are along the bottom & right edges
  * (the edges that have to connect to other subgrids)
  *
- * for a 7x8 subgrid that is atually 7 rows and 8 columns, that's 14 bits
+ * for a 7x8 subgrid that is 14 bits
  * 
  * This is used to generate the region key for the subgrid
  *
- * The region key will have one nibble per edge square, and that nibble will contain
- * an arbitrary region number, so all the edge squares with "1" will be in the same region,
- * and all the edge squares with a "2" will be in the same region (but not connected to region 1), etc.
+ * A region key actually consists of a number of different bitmasks, each of which
+ * shows where one of the unconnected regions in the subgrid touch the edge squares.
  *
- * For the "raw" region key, just put one edge bit in each nibble, so each nibble will be "1" or "0" depending on whether
- * the corresponding edge square is black or white.  We calculate this on subgrids that have a "1" in each position in 
- * one region, with the rest of the subgrid 0.
+ * For most subgrids there will only be one region (i.e., all the white squares in that
+ * subgrid connect to each other), so there will only be one bitmask.  If there are two
+ * regions in the subgrid, that subgrid will have two bitmasks in its region key, and so
+ * on.
  *
- * We can then multiply the "raw" regions keys for the individual regions by the region number, and bitwise-or (or add) them
- * up to get the whole region key.
- *
- * so the edge bits in a 7x8 sg are bits          7, 15, 23, 31, 39, 47, 55,   54, 53, 52, 51, 50, 49, 48
- * we want to put those into rawkey bit positions 0,  4,  8, 12, 16, 20, 24,   56, 52, 48, 44, 40, 36, 32
- * (we reverse the order of the bottom side, and put the "bottom" bits in the higher 32-bits of the 64-bit region key,
- * so that we can just swap dwords to "mesh" the keys on the A and B subgrids... kind of arbitrary really)
- *
- * A 64-bit (long long) region key will hold up to 16 edge squares with up to 16 region numbers per square... that
- * is enough for a 15x15 grid (with 7x8 subgrid)... should be enough for a 17x17 grid (with 8x9 subgrids) if only
- * 3 bits per square are used, which would be enough... more than that, though, and you'd probably need to expand the
- * size of the region key 
  */
 
 /*
@@ -915,16 +895,7 @@ unsigned long long singlesquare_bitmask_7x8(int r, int c) {
 #if (SUBGRID_ROWS==7)
 const int edge_bitpos_in_7x8sg[14] =    {7, 15, 23, 31, 39, 47, 55,  54, 53, 52, 51, 50, 49, 48};
 const int edge_bitpos_in_bitmask[14] =  {0,  1,  2,  3,  4,  5,  6,  14, 13, 12, 11, 10,  9,  8};
-// regkey_bitmask bit that's adjacent to the center square:
 const regkey_bitmask regkey_bitmask_next_to_centersquare = 0x40; // regkey bitmask that has a "1" adjacent to the center square
-#endif
-
-#if 0
-//#if (SUBGRID_ROWS==5)
-const int edge_bitpos_in_7x8sg[14] =    {5, 11, 17, 23, 29,   28, 27, 26, 25, 24};
-const int edge_bitpos_in_bitmask[14] =  {0,  1,  2,  3,  4,   12, 11, 10,  9,  8};
-// regkey_bitmask bit that's adjacent to the center square:
-const regkey_bitmask regkey_bitmask_next_to_centersquare = 0x10;
 #endif
 
 #if PUZZLE_SIZE<16
@@ -963,7 +934,6 @@ typedef unsigned int wholegrid_edge_bitmask;
  */
 
 wholegrid_edge_bitmask edges_next_to_centersquare; // set in init_early_stuff... can't get it to work here
-
 
 
 regkey_bitmask edge_bitmask_of_seen_sg() {
@@ -1017,22 +987,13 @@ int find_region(int r, int c) {
 	return count;
 }
 
-/*
- * region_key_7x8
- *
- * return number of regions found, and the region key in *regkey
- */
 
-//#if PUZZLE_SIZE==15
+/*
+ * pre-define the row/col of each edge square in the 7x8 subgrid (for speed)
+ */
 #if SUBGRID_ROWS==7
 int sg_7x8_edge_row[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {0, 1, 2, 3, 4, 5, 6,  6, 6, 6, 6, 6, 6, 6};
 int sg_7x8_edge_col[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {7, 7, 7, 7, 7, 7, 7,  6, 5, 4, 3, 2, 1, 0};
-#endif
-
-#if 0
-//#if PUZZLE_SIZE==11
-int sg_7x8_edge_row[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {0, 1, 2, 3, 4,  4, 4, 4, 4, 4};
-int sg_7x8_edge_col[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {5, 5, 5, 5, 5,  4, 3, 2, 1, 0};
 #endif
 
 /*
@@ -1046,11 +1007,10 @@ int sg_7x8_edge_col[SUBGRID_ROWS + SUBGRID_COLS_7x8 - 1] = {5, 5, 5, 5, 5,  4, 3
  * returns -1 if there are isolated white regions within the subgrid
  *
  */
-int region_key_7x8(int lsg, int rsg, struct single_regkey *regkey) { // need to return "keys" for where regions hit the edge
+int region_key_7x8(int lsg, int rsg, struct single_regkey *regkey) {
 	int r, c, count, i;
 	int regions_found;
 	int region_size;
-	//unsigned long long seen_bitmask, all_seen_bitmasks;
 	regkey_bitmask seen_bitmask, previous_seen_bitmasks;
 
 	/*
@@ -1110,9 +1070,9 @@ int region_key_7x8(int lsg, int rsg, struct single_regkey *regkey) { // need to 
 /*
  * regkeys_fit
  *
- * ensure that all the regions in the "A" (regkeyA) and "B" (regkeyB) subgrids
+ * Check if all the regions in the "A" (regkeyA) and "B" (regkeyB) subgrids
  * connect together (i.e., the non-connected regions in "A" must be connected
- * together in "B", or else we'll still have regions of white squares that don't
+ * together through "B", or else we'll still have regions of white squares that don't
  * connect to each other)
  *
  * Each region key contains bitmasks of the edge squares for each separate region
@@ -1535,60 +1495,6 @@ int main(int argc, const char *argv[]) {
 
 	init_line_ok_array();
 
-#if 0
-	{
-		//unsigned long long sg7x8;
-		int lsg1, rsg1, regions, lsg2, rsg2;
-		struct single_regkey regkeyA, regkeyB;
-		//lsg1 = 0x33;
-		//rsg1 = 0x2e222f0;
-		//sg7x8 = 0xe05432cccc8151l;
-		lsg1=0x1ff;
-		rsg1=0xe00;
-
-		printf("left subgrid A: %x\n",lsg1);
-		print_subgrid_7x4(lsg1);
-		printf("right subgrid A: %x\n",rsg1);
-		print_subgrid_7x4(rsg1);
-		printf("\n");
-
-		lsg2=0x7000;
-		rsg2=0;
-
-		printf("left subgrid B: %x\n",lsg2);
-		print_subgrid_7x4(lsg1);
-		printf("right subgrid B: %x\n",rsg2);
-		print_subgrid_7x4(rsg1);
-		printf("\n");
-
-		//printf("subgrid %lx:\n", sg7x8);
-		//print_subgrid_7x8_whole(sg7x8);
-
-		printf("left 7x8 subgrid:\n");
-		print_subgrid_7x8(lsg1, rsg1);
-		printf("\n");
-
-		printf("right 7x8 subgrid:\n");
-		print_subgrid_7x8(lsg2, rsg2);
-		printf("\n");
-
-		regions = region_key_7x8(lsg1, rsg1, &regkeyA);
-		printf("regions %d, region key: \n", regions);
-		print_regkey(regkeyA);
-		printf("\n");
-
-		regions = region_key_7x8(lsg2, rsg2, &regkeyB);
-		print_regkey(regkeyB);
-		printf("keys fit: %d\n", regkeys_fit(&regkeyA, &regkeyB));
-		printf("\n");
-
-		print_wholegrid(lsg1, rsg1, lsg2, rsg2);
-		print_wholegrid_asanumber(lsg1, rsg1, lsg2, rsg2, 1);
-		printf("\n\n");
-		//exit(0);
-	}
-#endif
-
 	printf("finding 7x4 subgrids...\n");
 	find_valid_7x4_subgrids();
 	printf("finding 7x8 subgrids...\n");
@@ -1606,15 +1512,10 @@ int main(int argc, const char *argv[]) {
 	 * the bottom two subgrids must be the same as the top 2, to maintain 180-degree rotational symmetry
 	 *
 	 * so we have to cycle through every possible right key and bottom key for "A", and make sure those
-	 *   both fit with the bottom key and right key (respectively) of "B"... then consider whether the
+	 *   both fit with the bottom key and right key (respectively) of "B"... make sure all the white
+	 *   squares connect up (using the region keys), and consider whether the
 	 *   center square can be white, black, or either
 	 *
-	 * TODO: check that all white space is connected... should be able to do this by finding how many
-	 *   unconnected groups of white space there are in the 7x8 subgrid (max 7, because each has to connect
-	 *   to the other subgrids), and record the mask for each of these groups that shows where each group
-	 *   connects to the edges... so, after we find keys for subgrid "a" and subgrid "b" that match, we
-	 *   will have to check these group masks to see which of those will cause all of the white "groups"
-	 *   to connect to each other...
 	 *
 	 *   +------------------------------+
 	 *   |m m m m m m m m { m m m m m } | 
@@ -1704,7 +1605,7 @@ int main(int argc, const char *argv[]) {
 													#if PRINT_ALL_VALID_GRIDS==1
 													{
 														int count_increased, printed;
-#if 1
+#if 0
 														if (   (A_rightkeyidx == 0) && (B_bottomkeyidx == 0)
 														    && (B_rightkeyidx == 0) && (A_bottomkeyidx == 0)) {
 															printf("<==gotvalid==> a_rki/a_bki/b_rki/b_bki %x/%x/%x/%x\n",
